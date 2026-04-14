@@ -43,8 +43,11 @@ DATA_FILE = "screenings.json"
 
 def load_data():
     if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
+        try:
+            with open(DATA_FILE, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return []
     return []
 
 def save_data(data):
@@ -182,9 +185,12 @@ with col_left:
             label_visibility="collapsed",
         )
         if uploaded:
-            with st.spinner("Extracting text from PDF…"):
-                fund_text = extract_pdf_text(uploaded)
-            st.success(f"Extracted {len(fund_text):,} characters from PDF.")
+            try:
+                with st.spinner("Extracting text from PDF…"):
+                    fund_text = extract_pdf_text(uploaded)
+                st.success(f"Extracted {len(fund_text):,} characters from PDF.")
+            except Exception as e:
+                st.error(f"Could not read PDF: {e}")
 
     with tab_text:
         pasted = st.text_area(
@@ -269,43 +275,52 @@ with col_right:
     result_placeholder = st.empty()
 
     if run_btn and fund_text.strip():
-        with st.spinner("Analysing fund…"):
-            result = run_screening(fund_text)
+        try:
+            with st.spinner("Analysing fund…"):
+                result = run_screening(fund_text)
+        except anthropic.AuthenticationError:
+            st.error("Invalid or missing API key. Set ANTHROPIC_API_KEY in your Streamlit secrets.")
+            result = None
+        except anthropic.APIError as e:
+            st.error(f"API error: {e}")
+            result = None
 
-        badge_color, badge_label = recommendation_badge(result)
+        if result is not None:
+            badge_color, badge_label = recommendation_badge(result)
 
-        # Save to history
-        entry = {
-            "fund_name": fund_name.strip() if fund_name.strip() else "Unnamed Fund",
-            "date": datetime.now().strftime("%d %b %Y, %H:%M"),
-            "result": result,
-        }
-        records = load_data()
-        records.append(entry)
-        save_data(records)
+            # Save to history
+            entry = {
+                "fund_name": fund_name.strip() if fund_name.strip() else "Unnamed Fund",
+                "date": datetime.now().strftime("%d %b %Y, %H:%M"),
+                "result": result,
+            }
+            records = load_data()
+            records.append(entry)
+            save_data(records)
 
-        with result_placeholder.container():
-            # Recommendation badge
-            st.markdown(
-                f"""
-                <div style="background:{badge_color}; color:{WHITE}; font-family:'Inter',sans-serif;
-                     font-size:15px; font-weight:600; padding:12px 20px; border-radius:6px; margin-bottom:20px;">
-                    {badge_label}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            # Result card
-            st.markdown(
-                f"""
-                <div style="background:{WHITE}; border:1px solid #D9D0C7; border-radius:8px;
-                     padding:28px 32px; font-family:'Inter',sans-serif; font-size:14px; line-height:1.7;
-                     color:#2A2A2A;">
-                """,
-                unsafe_allow_html=True,
-            )
-            st.markdown(result)
-            st.markdown("</div>", unsafe_allow_html=True)
+        if result is not None:
+            with result_placeholder.container():
+                # Recommendation badge
+                st.markdown(
+                    f"""
+                    <div style="background:{badge_color}; color:{WHITE}; font-family:'Inter',sans-serif;
+                         font-size:15px; font-weight:600; padding:12px 20px; border-radius:6px; margin-bottom:20px;">
+                        {badge_label}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                # Result card
+                st.markdown(
+                    f"""
+                    <div style="background:{WHITE}; border:1px solid #D9D0C7; border-radius:8px;
+                         padding:28px 32px; font-family:'Inter',sans-serif; font-size:14px; line-height:1.7;
+                         color:#2A2A2A;">
+                    """,
+                    unsafe_allow_html=True,
+                )
+                st.markdown(result)
+                st.markdown("</div>", unsafe_allow_html=True)
 
     else:
         result_placeholder.markdown(
