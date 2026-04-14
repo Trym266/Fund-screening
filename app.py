@@ -6,6 +6,10 @@ import PyPDF2
 import io
 from datetime import datetime
 
+# Load API key from Streamlit secrets into environment
+if "ANTHROPIC_API_KEY" in st.secrets:
+    os.environ["ANTHROPIC_API_KEY"] = st.secrets["ANTHROPIC_API_KEY"]
+
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Ferd Impact – Fund Screener",
